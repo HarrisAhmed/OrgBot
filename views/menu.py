@@ -2,11 +2,15 @@ import disnake as discord
 
 
 class Menu(discord.ui.View):
-    def __init__(self, embeds, files=None):
-        super().__init__(timeout=30)
-        self.files=files
+    def __init__(self, embeds, ids=None):
+        super().__init__(timeout=None)
+        self.files=None
         self.embeds = embeds
+        self.remove_item(self.add_insig)
+        self.remove_item(self.next)
         self.index = 0
+        self.ids = ids
+        self.curr = {}
         self.remove.label = f"Page 1/{len(self.embeds)}"
         self._update_state()
 
@@ -83,6 +87,46 @@ class Menu(discord.ui.View):
         for child in self.children:
             child.disabled = True  #type:ignore
         await self.inter.edit_original_message(view=self)  #type:ignore
+
+
+    @discord.ui.button(label="Set Insignia", style=discord.ButtonStyle.blurple)
+    async def add_insig(self, b, inter):
+        await inter.response.send_modal(
+            title=f"Enter insignia for each rank",
+            custom_id="role_insig",
+            components=[
+                discord.ui.TextInput(
+                    label=r.name,
+                    placeholder="Type Here...",
+                    custom_id=r.id,
+                    style=discord.TextInputStyle.paragraph,
+                    min_length=1,
+                    max_length=8,
+                    required=False
+                ) for r in self.ids[self.index]
+            ],
+        )
+        modal_inter: discord.ModalInteraction = await self.bot.wait_for(
+        "modal_submit",
+        check=lambda i: i.custom_id == "role_insig" and i.author.id ==
+        inter.author.id)
+        for r, v in modal_inter.text_values.items():
+            self.curr[int(r)] = v
+        emb = self.embeds[self.index]
+        emb.clear_fields()
+        for l in self.ids[self.index]:
+            emb.add_field(name=l.name, value=self.curr[l.id], inline=False)
+        await modal_inter.response.edit_message(embed=emb)
+
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.green)
+    async def next(self, b, inter):
+        self.vie.clear_items()
+        self.vie.add_item(self.vie.yes3)
+        self.vie.add_item(self.vie.no3)
+        self.vie.add_item(self.vie.cancel)
+        self.vie.curr = self.curr
+        await inter.response.edit_message(embed=discord.Embed(title="Registration messsage", description="Do you want to setup messages that are displayed at start or end of registration?\nClicking no will select the default ones.", color=discord.Color.dark_blue()), view=self.vie)
 
 
 class MenuSelect(discord.ui.Select):
