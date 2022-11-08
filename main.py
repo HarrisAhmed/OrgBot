@@ -4,6 +4,7 @@ from disnake.ext import commands
 from tictactoe import TicTacToeView
 from views import Confirm, SetupView
 from bot import Apollyon
+from token import TOKEN
 import random
 from rsi.org import OrgAPI
 import time
@@ -143,5 +144,4 @@ async def test(inter):
     await inter.send("hello", view=v)
 
 bot.load_extension("jishaku")
-bot.run(
-    "ODE4ODMyNDYxMTA2NjQzMDI1.G0zyWZ.RrIO3NQnPSZgAvWjhKQcaijKMLJJnujYJCZfbs")
+bot.run(TOKEN)
