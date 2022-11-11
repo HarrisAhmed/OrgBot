@@ -1,6 +1,6 @@
 from disnake.ext import commands
 import disnake as discord
-import asqlite
+import asyncpg
 
 
 class Apollyon(commands.Bot):
@@ -35,60 +35,59 @@ class Apollyon(commands.Bot):
             "E-1" : {"insignia":"()", "id":1020112626245709834, "name":""},
             "Rec" : {"insignia":"R-", "id":1021618895817285642, "name":""}
         }
-        self.conn: asqlite.Connection = None
+        self.db: asyncpg.Connection = None
         
 
-    async def register(self, guild_id, user_id, handle=False, new=False):
-        async with self.conn.cursor() as cr:
-            await cr.execute("CREATE TABLE IF NOT EXISTS registers(guild_id INT, user_id INT, rank TEXT, handle TEXT)")
-            if not new:
-                await cr.execute("INSERT INTO registers(guild_id, user_id, rank, handle) VALUES(?, ?, ?, ?)", (guild_id, user_id, "Rec", handle))
-                await self.conn.commit()
-            else:
-                r = await self.get_user_registry(user_id, guild_id)
-                rank = self.ranking[self.ranking.index(r[0]) + 1]
-                await cr.execute("UPDATE registers SET rank=? WHERE user_id=? AND guild_id=?", (rank, user_id, guild_id))
-                await self.conn.commit()
-                return rank, r
+    async def register(self, guild_id, user_id, handle=False, new=False, demote=False):
+        if not new and not demote:
+            conn = await self.db.acquire()
+            ranking = await self.get_guild_ranking(guild_id)
+            async with conn.transaction():
+                await self.db.execute("INSERT INTO registers(guild_id, user_id, rank, handle) VALUES($1, $2, $3, $4)", guild_id, user_id, len(ranking)-1, handle)
+            await self.db.release(conn)
+        if new:
+            r = await self.get_user_registry(user_id, guild_id)
+            conn = await self.db.acquire()
+            ranking = await self.get_guild_ranking(guild_id)
+            rank = r[0] - 1 if not demote else r[0] + 1
+            async with conn.transaction():
+                await self.db.execute("UPDATE registers SET rank=$1 WHERE user_id=$2 AND guild_id=$3", rank, user_id, guild_id)
+            await self.db.release(conn)
+            return rank, r
 
     
     async def get_user_registry(self, user_id, guild_id):
-        async with self.conn.cursor() as cr:
-            await cr.execute("CREATE TABLE IF NOT EXISTS registers(guild_id INT, user_id INT, rank TEXT, handle TEXT)")
-            await cr.execute("SELECT rank, handle FROM registers WHERE guild_id=? AND user_id=?", (guild_id, user_id))
-            r = await cr.fetchone()
-            return r
+        r = await self.db.fetchrow("SELECT * FROM registers WHERE guild_id=$1 AND user_id=$2", guild_id, user_id)
+        try:
+            return r["rank"], r["handle"]
+        except:
+            return None
 
 
     async def set_guild_data(self, guild_id, modroles, curr, spectrum_id, reg1, reg2):
-        async with self.conn.cursor() as cr:
-            modrol = " ".join(str(r.id) for r in modroles)
-            await cr.execute("CREATE TABLE IF NOT EXISTS guild_data(guild_id INT, modroles TEXT, spectrum_id TEXT, reg1, reg2)")
-            await cr.execute("INSERT INTO guild_data(guild_id, modroles, spectrum_id, reg1, reg2) VALUES(?, ?, ?, ?, ?)", (guild_id, modrol, spectrum_id, reg1, reg2))
-            try:
-                c = [(guild_id, r, i) for r, i in curr.items()]
-                print(c)
-            except:
-                c = [(guild_id, r.id, " ") for r in curr]
-                print(c)
-            print("here")
-            await cr.execute("CREATE TABLE IF NOT EXISTS rank_data(guild_id INT, role INT, insignia TEXT)")
-            await cr.executemany("INSERT INTO rank_data(guild_id, role, insignia) VALUES(?, ?, ?)", c)
-            await self.conn.commit()
+        modrol = " ".join(str(r.id) for r in modroles)
+        try:
+            c = [(guild_id, int(curr[r]["id"]), curr[r]["insignia"], r) for r in curr.keys()]
+        except:
+            c = [(guild_id, int(r.id), " ", curr.index(r)) for r in curr]
+        conn = await self.db.acquire()
+        async with conn.transaction():
+            await self.db.execute("INSERT INTO guild_data(guild_id, modroles, spectrum_id, reg1, reg2) VALUES($1, $2, $3, $4, $5)", guild_id, modrol, spectrum_id, reg1, reg2)
+            await self.db.executemany("INSERT INTO rank_data(guild_id, role, insignia, place) VALUES($1, $2, $3, $4)", c)
+        await self.db.release(conn)
 
 
     async def get_guild_data(self, guild_id):
-        async with self.conn.cursor() as cr:
-            await cr.execute("SELECT * FROM guild_data WHERE guild_id=?", (guild_id))
-            r = await cr.fetchone()
-            return r
+        r = await self.db.fetchrow("SELECT * FROM guild_data WHERE guild_id=$1", guild_id)
+        try:
+            return r["guild_id"], r["modroles"], r["spectrum_id"], r["reg1"], r["reg2"]
+        except:
+            return None
 
 
     async def get_guild_ranking(self, guild_id):
-        async with self.conn.cursor() as cr:
-            await cr.execute("SELECT * FROM rank_data WHERE guild_id=?", (guild_id))
-            r = await cr.fetchall()
-            dt = {}
-            for l in r:
-                dt[l[1]] = l[2]
-            return dt
+        r = await self.db.fetch("SELECT * FROM rank_data WHERE guild_id=$1", guild_id)
+        dt = {}
+        for l in r:
+            dt[l["place"]] = {"id":l["role"], "insignia":l["insignia"]}
+        return dt

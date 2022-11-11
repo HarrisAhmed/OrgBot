@@ -1,22 +1,52 @@
-import asqlite
+import asyncpg
 import disnake as discord
 from disnake.ext import commands
 from tictactoe import TicTacToeView
 from views import Confirm, SetupView
 from bot import Apollyon
-from token import TOKEN
+import os
+import asyncio
 import random
 from rsi.org import OrgAPI
 import time
 
-org = OrgAPI('TFTTALON')
-
 bot = Apollyon()
+
+async def run():
+    credentials = {"user": "xijbihcb", "password": "OgaBs12PL9XIsg6TdwPNFo3xXiL2y5zY", "database": "xijbihcb", "host": "jelani.db.elephantsql.com"}
+    db = await asyncpg.create_pool(**credentials, max_size=5, min_size=3)
+    await db.execute("CREATE TABLE IF NOT EXISTS rank_data(guild_id bigint, role bigint, insignia TEXT, place INT)")
+    await db.execute("CREATE TABLE IF NOT EXISTS registers(guild_id bigint, user_id bigint, rank INT, handle TEXT)")
+    await db.execute("CREATE TABLE IF NOT EXISTS guild_data(guild_id bigint, modroles TEXT, spectrum_id TEXT, reg1 TEXT, reg2 TEXT)")
+    bot.db = db
+    try:
+        await bot.start(TOKEN)
+    except KeyboardInterrupt:
+        await db.close()
+        await bot.logout()
+
+
+def regcheck():
+    async def predicate(ctx):
+        r = await bot.get_guild_data(ctx.guild.id)
+        if not r:
+            raise discord.DiscordException("No reg")
+        else:
+            return True
+    return commands.check(predicate)
+
+
+def mycheck():
+    async def predicate(ctx):
+        r = await bot.get_guild_data(ctx.guild.id)
+        modroles = [r[1]] if len(r[1].split(" ")) < 2 else [i for i in r[1].split(" ")]
+        ids = [r.id for r in ctx.author.roles]
+        return any(int(i) in ids for i in modroles) or ctx.author.id == ctx.guild.owner_id
+    return commands.check(predicate)
 
 
 @bot.event
 async def on_ready():
-    bot.conn = await asqlite.connect("main.db")
     print("I'm Ready!")
 
 
@@ -30,9 +60,10 @@ async def ping(inter):
                                       )
 
 
-@commands.has_role(1005250279505154078)
 @bot.slash_command(
     description="Sends a message to all of the memebrs having a specific role")
+@regcheck()
+@mycheck()
 async def msg(inter, role: discord.User):
     await inter.response.send_modal(
         title=f"Send Message to {role.name}",
@@ -58,6 +89,7 @@ async def msg(inter, role: discord.User):
 
 
 @bot.slash_command(description="Register yourself into the Org!")
+@regcheck()
 async def register(inter: discord.ApplicationCommandInteraction,
                    star_citizen_handle: str = commands.Param(description="To find this, go to your account settings on the website and review your Handle.")):
     if isinstance(inter.channel, discord.DMChannel):
@@ -81,6 +113,7 @@ async def register(inter: discord.ApplicationCommandInteraction,
         v2.inter = inter
         v2.bot = bot
         v2.rank = rank
+        print(rank)
         v2.data = data
         v2.remove_item(v2.confirm)
         v2.remove_item(v2.cancel)
@@ -98,14 +131,26 @@ async def register(inter: discord.ApplicationCommandInteraction,
 
 
 @bot.slash_command(description="Promote a member to higher authority")
+@regcheck()
+@mycheck()
 async def promote(inter:discord.ApplicationCommandInteraction, user:discord.Member):
-    r = await bot.register(inter.guild.id, user.id, new=True)
-    await inter.send("Successfully promoted the member!")
-    await user.edit(nick=bot.ranks[r[0]]["insignia"] + " " + r[1][1])
-    role1 = inter.guild.get_role(bot.ranks[r[0]]["id"])
-    role2 = inter.guild.get_role(bot.ranks[r[1][0]]["id"])
-    await inter.author.remove_roles(role2)
-    await inter.author.add_roles(role1)
+    await inter.response.defer()
+    reg = await bot.get_user_registry(user.id, inter.guild.id)
+    if not reg:
+        return await inter.send("This user is not registered to this Org!", ephemeral=True)
+    r = await bot.get_guild_ranking(inter.guild.id)
+    if reg[0] - 1 < 0:
+        return await inter.send("This user is already at the highest rank!", ephemeral=True)
+    role = inter.guild.get_role(r[reg[0] - 1]["id"])
+    role2 = inter.guild.get_role(r[reg[0]]["id"])
+    await user.add_roles(role)
+    await user.remove_roles(role2)
+    try:
+        await user.edit(nick=f"{r[reg[0] - 1]['insignia']} {reg[1]}")
+    except:
+        pass
+    await inter.followup.send(f"Successfully promoted {user.mention} to {role.name}")
+    await bot.register(inter.guild.id, inter.author.id, new=True)
 
 
 @bot.slash_command(description="Play a game of Tic Tac Toe!")
@@ -123,8 +168,42 @@ async def tictactoe(self, inter):
             view.m = await inter.original_message() #type:ignore
 
 
+def is_guild_owner():
+    async def predicate(ctx):
+        return ctx.author.id == ctx.guild.owner_id
+    return commands.check(predicate)
+
+
+@bot.slash_command(description="Demote a user to lower authority")
+@regcheck()
+@mycheck()
+async def demote(inter, user:discord.Member):
+    await inter.response.defer()
+    reg = await bot.get_user_registry(user.id, inter.guild.id)
+    if not reg:
+        return await inter.send("This user is not registered to this Org!", ephemeral=True)
+    r = await bot.get_guild_ranking(inter.guild.id)
+    if reg[0] + 1 >= len(r):
+        return await inter.send("This user is already at the lowest rank!", ephemeral=True)
+    role = inter.guild.get_role(r[reg[0] + 1]["id"])
+    role2 = inter.guild.get_role(r[reg[0]]["id"])
+    await user.add_roles(role)
+    try:
+        await user.remove_roles(role2)
+    except:
+        pass
+    try:
+        await user.edit(nick=f"{r[reg[0] + 1]['insignia']} {reg[1]}")
+    except:
+        pass
+    await inter.followup.send(f"Successfully promoted {user.mention} to {role.name}")
+    await bot.register(inter.guild.id, inter.author.id, demote=True)
+
+
 @bot.slash_command(description="Setup Orgbot in your server!")
+@is_guild_owner()
 async def setup(inter, org_spectrum_id:str=commands.Param(description="Enter you Org's spectrum ID. Be sure this is same as shown on website")):
+    await inter.response.defer()
     org = await bot.loop.run_in_executor(None, OrgAPI, org_spectrum_id)
     if "members" not in org._ttlcache:
             org._ttlcache["members"] = await bot.loop.run_in_executor(None, org._update_members, '')
@@ -135,7 +214,7 @@ async def setup(inter, org_spectrum_id:str=commands.Param(description="Enter you
     v.inter = inter
     emb = discord.Embed(title=org.name, description="Placeholder")
     emb.set_thumbnail(url=org.logo)
-    await inter.send(embed=emb, view=v)
+    await inter.edit_original_message(embed=emb, view=v)
 
 
 @bot.slash_command()
@@ -143,5 +222,22 @@ async def test(inter):
     v = discord.ui.View()
     await inter.send("hello", view=v)
 
+
+@bot.slash_command()
+@regcheck()
+async def org_info(inter: discord.ApplicationCommandInteraction):
+    r = await bot.get_guild_data(inter.guild_id)
+    org = OrgAPI(r[2])
+    emb = discord.Embed(title=org.name, description=org.join_us, color=discord.Color.dark_blue())
+    emb.add_field(name="Spectrum ID", value=org.symbol)
+    emb.add_field(name="Model", value=org.model)
+    emb.add_field(name="Commitment", value=org.commitment)
+    emb.add_field(name="Primary Focus", value=org.primary_focus)
+    emb.add_field(name="Secondary Focus", value=org.secondary_focus)
+    emb.set_thumbnail(url=org.banner)
+    await inter.send(embed=emb)
+
+
 bot.load_extension("jishaku")
-bot.run(TOKEN)
+loop = asyncio.get_event_loop()
+loop.run_until_complete(run())

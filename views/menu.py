@@ -2,7 +2,7 @@ import disnake as discord
 
 
 class Menu(discord.ui.View):
-    def __init__(self, embeds, ids=None):
+    def __init__(self, embeds, ids=None, roles=None):
         super().__init__(timeout=None)
         self.files=None
         self.embeds = embeds
@@ -10,6 +10,7 @@ class Menu(discord.ui.View):
         self.remove_item(self.next)
         self.index = 0
         self.ids = ids
+        self.roles: list = roles
         self.curr = {}
         self.remove.label = f"Page 1/{len(self.embeds)}"
         self._update_state()
@@ -111,11 +112,11 @@ class Menu(discord.ui.View):
         check=lambda i: i.custom_id == "role_insig" and i.author.id ==
         inter.author.id)
         for r, v in modal_inter.text_values.items():
-            self.curr[int(r)] = v
+            self.curr[self.roles.index(int(r))] = {"id":str(r), "insignia":v}
         emb = self.embeds[self.index]
         emb.clear_fields()
         for l in self.ids[self.index]:
-            emb.add_field(name=l.name, value=self.curr[l.id], inline=False)
+            emb.add_field(name=l.name, value=self.curr[self.roles.index(l.id)]["insignia"], inline=False)
         await modal_inter.response.edit_message(embed=emb)
 
 

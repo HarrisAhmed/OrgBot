@@ -91,7 +91,9 @@ class SetupView(discord.ui.View):
             ids.append(nl)
             embeds.append(emb)
         self.clear_items()
-        v = Menu(embeds=embeds, ids=ids)
+        r = [r.id for r in self.roles]
+        print(r)
+        v = Menu(embeds=embeds, ids=ids, roles=r)
         v.inter = inter
         v.add_item(v.add_insig)
         v.add_item(v.next)
