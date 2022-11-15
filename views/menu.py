@@ -122,12 +122,9 @@ class Menu(discord.ui.View):
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.green)
     async def next(self, b, inter):
-        self.vie.clear_items()
-        self.vie.add_item(self.vie.yes3)
-        self.vie.add_item(self.vie.no3)
-        self.vie.add_item(self.vie.cancel)
-        self.vie.curr = self.curr
-        await inter.response.edit_message(embed=discord.Embed(title="Registration messsage", description="Do you want to setup messages that are displayed at start or end of registration?\nClicking no will select the default ones.", color=discord.Color.dark_blue()), view=self.vie)
+        self.value = True
+        self.inter = inter
+        self.stop()
 
 
 class MenuSelect(discord.ui.Select):

@@ -2,9 +2,8 @@ import asyncpg
 import disnake as discord
 from disnake.ext import commands
 from tictactoe import TicTacToeView
-from views import Confirm, SetupView
+from views import Confirm, setupstart, Confirm2
 from bot import Apollyon
-import os
 import asyncio
 import random
 from rsi.org import OrgAPI
@@ -17,10 +16,11 @@ async def run():
     db = await asyncpg.create_pool(**credentials, max_size=5, min_size=3)
     await db.execute("CREATE TABLE IF NOT EXISTS rank_data(guild_id bigint, role bigint, insignia TEXT, place INT)")
     await db.execute("CREATE TABLE IF NOT EXISTS registers(guild_id bigint, user_id bigint, rank INT, handle TEXT)")
-    await db.execute("CREATE TABLE IF NOT EXISTS guild_data(guild_id bigint, modroles TEXT, spectrum_id TEXT, reg1 TEXT, reg2 TEXT)")
+    await db.execute("CREATE TABLE IF NOT EXISTS guild_data(guild_id bigint, modroles TEXT, spectrum_id TEXT, reg1 TEXT, reg2 TEXT, reg_ch bigint)")
     bot.db = db
+    keep_alive()
     try:
-        await bot.start(TOKEN)
+        await bot.start("ODE4ODMyNDYxMTA2NjQzMDI1.GBsoWI.vk4JuGxcYbqTVW8yfP2EUys2qVbMhOmSMVTDEo")
     except KeyboardInterrupt:
         await db.close()
         await bot.logout()
@@ -144,7 +144,10 @@ async def promote(inter:discord.ApplicationCommandInteraction, user:discord.Memb
     role = inter.guild.get_role(r[reg[0] - 1]["id"])
     role2 = inter.guild.get_role(r[reg[0]]["id"])
     await user.add_roles(role)
-    await user.remove_roles(role2)
+    try:
+        await user.remove_roles(role2)
+    except:
+        pass
     try:
         await user.edit(nick=f"{r[reg[0] - 1]['insignia']} {reg[1]}")
     except:
@@ -196,25 +199,29 @@ async def demote(inter, user:discord.Member):
         await user.edit(nick=f"{r[reg[0] + 1]['insignia']} {reg[1]}")
     except:
         pass
-    await inter.followup.send(f"Successfully promoted {user.mention} to {role.name}")
-    await bot.register(inter.guild.id, inter.author.id, demote=True)
+    await inter.followup.send(f"Successfully demoted {user.mention} to {role.name}")
+    await bot.register(inter.guild.id, inter.author.id, new=True, demote=True)
 
 
 @bot.slash_command(description="Setup Orgbot in your server!")
 @is_guild_owner()
 async def setup(inter, org_spectrum_id:str=commands.Param(description="Enter you Org's spectrum ID. Be sure this is same as shown on website")):
     await inter.response.defer()
-    org = await bot.loop.run_in_executor(None, OrgAPI, org_spectrum_id)
+    try:
+        org = await bot.loop.run_in_executor(None, OrgAPI, org_spectrum_id)
+    except:
+        return await inter.send("Org spectrum ID not found", ephemeral=True)
     if "members" not in org._ttlcache:
             org._ttlcache["members"] = await bot.loop.run_in_executor(None, org._update_members, '')
     members = org._ttlcache["members"]
-    mem = [m['handle'] for m in members]
-    v = SetupView(org, mem, inter.guild.id)
-    v.bot = bot
-    v.inter = inter
+    v = Confirm2(inter)
+    v.yes.label = "Confirm"
     emb = discord.Embed(title=org.name, description="Placeholder")
     emb.set_thumbnail(url=org.logo)
     await inter.edit_original_message(embed=emb, view=v)
+    await v.wait()
+    if v.value:
+        await setupstart(v.inter, bot, org)
 
 
 @bot.slash_command()
@@ -234,7 +241,7 @@ async def org_info(inter: discord.ApplicationCommandInteraction):
     emb.add_field(name="Commitment", value=org.commitment)
     emb.add_field(name="Primary Focus", value=org.primary_focus)
     emb.add_field(name="Secondary Focus", value=org.secondary_focus)
-    emb.set_thumbnail(url=org.banner)
+    emb.set_image(url=org.banner)
     await inter.send(embed=emb)
 
 
