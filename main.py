@@ -13,7 +13,7 @@ import time
 bot = Apollyon()
 
 async def run():
-    credentials = {"user": "xijbihcb", "password": "OgaBs12PL9XIsg6TdwPNFo3xXiL2y5zY", "database": "xijbihcb", "host": "jelani.db.elephantsql.com"}
+    credentials = {"user": "orgbot", "password": "orgbot", "database": "main", "host": "localhost"}
     db = await asyncpg.create_pool(**credentials, max_size=5, min_size=3)
     await db.execute("CREATE TABLE IF NOT EXISTS rank_data(guild_id bigint, role bigint, insignia TEXT, place INT)")
     await db.execute("CREATE TABLE IF NOT EXISTS registers(guild_id bigint, user_id bigint, rank INT, handle TEXT)")
