@@ -5,6 +5,7 @@ from tictactoe import TicTacToeView
 from views import Confirm, setupstart, Confirm2
 from bot import Apollyon
 import asyncio
+import os
 import random
 from rsi.org import OrgAPI
 import time
@@ -18,9 +19,8 @@ async def run():
     await db.execute("CREATE TABLE IF NOT EXISTS registers(guild_id bigint, user_id bigint, rank INT, handle TEXT)")
     await db.execute("CREATE TABLE IF NOT EXISTS guild_data(guild_id bigint, modroles TEXT, spectrum_id TEXT, reg1 TEXT, reg2 TEXT, reg_ch bigint)")
     bot.db = db
-    keep_alive()
     try:
-        await bot.start("ODE4ODMyNDYxMTA2NjQzMDI1.GBsoWI.vk4JuGxcYbqTVW8yfP2EUys2qVbMhOmSMVTDEo")
+        await bot.start(os.getenv("token"))
     except KeyboardInterrupt:
         await db.close()
         await bot.logout()

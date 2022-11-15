@@ -64,7 +64,7 @@ class Apollyon(commands.Bot):
             return None
 
 
-    async def set_guild_data(self, guild_id, modroles, curr, spectrum_id, reg1, reg2):
+    async def set_guild_data(self, guild_id, modroles, curr, spectrum_id, reg1, reg2, reg_ch):
         modrol = " ".join(str(r.id) for r in modroles)
         try:
             c = [(guild_id, int(curr[r]["id"]), curr[r]["insignia"], r) for r in curr.keys()]
@@ -72,7 +72,7 @@ class Apollyon(commands.Bot):
             c = [(guild_id, int(r.id), " ", curr.index(r)) for r in curr]
         conn = await self.db.acquire()
         async with conn.transaction():
-            await self.db.execute("INSERT INTO guild_data(guild_id, modroles, spectrum_id, reg1, reg2) VALUES($1, $2, $3, $4, $5)", guild_id, modrol, spectrum_id, reg1, reg2)
+            await self.db.execute("INSERT INTO guild_data(guild_id, modroles, spectrum_id, reg1, reg2, reg_ch) VALUES($1, $2, $3, $4, $5, $6)", guild_id, modrol, spectrum_id, reg1, reg2, reg_ch)
             await self.db.executemany("INSERT INTO rank_data(guild_id, role, insignia, place) VALUES($1, $2, $3, $4)", c)
         await self.db.release(conn)
 
@@ -80,7 +80,7 @@ class Apollyon(commands.Bot):
     async def get_guild_data(self, guild_id):
         r = await self.db.fetchrow("SELECT * FROM guild_data WHERE guild_id=$1", guild_id)
         try:
-            return r["guild_id"], r["modroles"], r["spectrum_id"], r["reg1"], r["reg2"]
+            return r["guild_id"], r["modroles"], r["spectrum_id"], r["reg1"], r["reg2"], r["reg_ch"]
         except:
             return None
 

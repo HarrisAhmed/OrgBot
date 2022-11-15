@@ -103,7 +103,6 @@ class Menu(discord.ui.View):
                     style=discord.TextInputStyle.paragraph,
                     min_length=1,
                     max_length=8,
-                    required=False
                 ) for r in self.ids[self.index]
             ],
         )

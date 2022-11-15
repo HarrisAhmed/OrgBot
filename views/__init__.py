@@ -1,2 +1,2 @@
 from .confirm import Confirm
-from .setup import SetupView
+from .setup import setupstart, Confirm2

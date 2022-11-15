@@ -32,6 +32,7 @@ class Confirm(discord.ui.View):
     async def next(self, button, inter: discord.ApplicationCommandInteraction):
         await inter.response.defer()
         us = await self.bot.loop.run_in_executor(None, fetch_citizen, self.hn)
+        self.us = us
         print(us)
         if not us or us["handle"] == "None":
             return await inter.channel.send(
@@ -64,3 +65,11 @@ class Confirm(discord.ui.View):
         await inter.response.edit_message(view=self)
         await self.bot.register(self.inter.guild.id, self.inter.author.id,
                                     self.hn)
+        ch = await self.bot.get_channel(self.data[5])
+        emb = discord.Embed(title="Registration Complete", url=self.us["url"], description="The user has completed the registration")
+        emb.add_field(name="User Handle", value=self.us["handle"])
+        emb.add_field(name="Title", value=self.us["civillian"])
+        emb.add_field(name="Language Fluency", value=", ".join(r for r in self.us["languages"]))
+        emb.add_field(name="Date Enlisted", value=self.us["enlisted"])
+        emb.set_thumbnail(url=self.us["avatar"])
+        await ch.send(embed=emb)
